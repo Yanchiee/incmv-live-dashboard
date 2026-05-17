@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>INCMV 2026 Live Dashboard</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">INCMV Awards 2026</p>
+        <h1>Live Dashboard</h1>
+      </div>
+      <div class="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="refresh-status">Loading live data...</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="overview-grid" aria-label="Dashboard overview">
+        <article class="metric primary">
+          <span class="metric-label">Total Benguet Comments</span>
+          <strong id="total-comments">--</strong>
+          <small id="comments-fetched">Waiting for data</small>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Benguet Views</span>
+          <strong id="benguet-views">--</strong>
+          <small id="benguet-rank">Global rank --</small>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Top Lokal</span>
+          <strong id="top-lokal">--</strong>
+          <small id="top-lokal-count">-- comments</small>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Latest Data Build</span>
+          <strong id="generated-time">--</strong>
+          <small id="generated-detail">Browser checks every minute</small>
+        </article>
+      </section>
+
+      <section class="feature-grid">
+        <article class="feature-card hero-video">
+          <img id="benguet-thumb" alt="Benguet INCMV video thumbnail">
+          <div>
+            <p class="eyebrow">Featured Entry</p>
+            <h2 id="benguet-title">God's Love | Benguet</h2>
+            <p id="benguet-meta">Loading current view count...</p>
+            <a id="benguet-link" class="button" href="#" target="_blank" rel="noreferrer">Open YouTube</a>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Kapisanan</h2>
+            <span id="kapisanan-total">-- total</span>
+          </div>
+          <div id="kapisanan-bars" class="bars"></div>
+        </article>
+      </section>
+
+      <nav class="tabs" aria-label="Dashboard sections">
+        <button class="tab active" data-tab="global">Global</button>
+        <button class="tab" data-tab="philippines">Philippines</button>
+        <button class="tab" data-tab="regions">Regions</button>
+        <button class="tab" data-tab="comments">Comments</button>
+        <button class="tab" data-tab="officers">Officers</button>
+      </nav>
+
+      <section id="tab-global" class="tab-panel active">
+        <div class="split-layout">
+          <article class="panel">
+            <div class="panel-header">
+              <h2>Global Ranking</h2>
+              <span>All official playlist entries</span>
+            </div>
+            <div id="global-ranking" class="ranking-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header">
+              <h2>Top Lokal Comments</h2>
+              <span>Current matched rows</span>
+            </div>
+            <div id="lokal-ranking" class="compact-table"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="tab-philippines" class="tab-panel">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Philippine Nationwide Ranking</h2>
+            <span>Luzon, Visayas, and Mindanao</span>
+          </div>
+          <div id="philippines-ranking" class="data-table"></div>
+        </article>
+      </section>
+
+      <section id="tab-regions" class="tab-panel">
+        <div class="region-grid">
+          <article class="panel"><div class="panel-header"><h2>Luzon</h2></div><div id="luzon-ranking" class="mini-ranking"></div></article>
+          <article class="panel"><div class="panel-header"><h2>Visayas</h2></div><div id="visayas-ranking" class="mini-ranking"></div></article>
+          <article class="panel"><div class="panel-header"><h2>Mindanao</h2></div><div id="mindanao-ranking" class="mini-ranking"></div></article>
+          <article class="panel"><div class="panel-header"><h2>Abroad</h2></div><div id="abroad-ranking" class="mini-ranking"></div></article>
+        </div>
+      </section>
+
+      <section id="tab-comments" class="tab-panel">
+        <div class="split-layout">
+          <article class="panel">
+            <div class="panel-header">
+              <h2>Latest Comments</h2>
+              <span>Newest fetched rows</span>
+            </div>
+            <div id="latest-comments" class="comments-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header">
+              <h2>Lokal Summary</h2>
+              <span>Top 20</span>
+            </div>
+            <div id="lokal-table" class="compact-table"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="tab-officers" class="tab-panel">
+        <div class="split-layout">
+          <article class="panel">
+            <div class="panel-header">
+              <h2>KDO Monitoring</h2>
+              <span>Ranked by comment count</span>
+            </div>
+            <div id="kdo-table" class="compact-table"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header">
+              <h2>Compound Monitoring</h2>
+              <span>Standalone workbook list</span>
+            </div>
+            <div id="compound-table" class="compact-table"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

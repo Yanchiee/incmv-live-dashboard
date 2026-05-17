@@ -9,8 +9,9 @@ The site is static and reads its latest numbers from `data/dashboard.json`.
 GitHub Actions runs `scripts/update-dashboard-data.mjs` on schedule, so the
 dashboard can refresh even when the local computer is off. The action fetches
 the public YouTube comments and official INCMV playlist rankings, rewrites
-`data/dashboard.json`, commits the change, and deploys to Cloudflare Pages when
-the Cloudflare token secret is configured.
+`data/dashboard.json`, and commits the change. The public Cloudflare Pages site
+reads that JSON directly from the GitHub `main` branch, so scheduled number
+updates do not require a Cloudflare deploy.
 
 ## Deployments
 

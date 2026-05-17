@@ -1,4 +1,4 @@
-const DATA_URL = './data/dashboard.json';
+const DATA_URL = 'https://raw.githubusercontent.com/Yanchiee/incmv-live-dashboard/main/data/dashboard.json';
 const REFRESH_MS = 60 * 1000;
 
 const state = {

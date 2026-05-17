@@ -4,6 +4,14 @@ Public dashboard for INCMV 2026 rankings, Benguet comment monitoring, Kapisanan 
 
 The site is static and reads its latest numbers from `data/dashboard.json`.
 
+## Cloud updates
+
+GitHub Actions runs `scripts/update-dashboard-data.mjs` on schedule, so the
+dashboard can refresh even when the local computer is off. The action fetches
+the public YouTube comments and official INCMV playlist rankings, rewrites
+`data/dashboard.json`, commits the change, and deploys to Cloudflare Pages when
+the Cloudflare token secret is configured.
+
 ## Deployments
 
 GitHub pushes to `main` deploy this folder to the existing Cloudflare Pages

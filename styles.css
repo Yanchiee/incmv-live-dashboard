@@ -368,6 +368,11 @@ td.number {
   line-height: 1.42;
 }
 
+.empty-state {
+  color: var(--muted);
+  margin: 0;
+}
+
 @media (max-width: 980px) {
   .overview-grid,
   .feature-grid,

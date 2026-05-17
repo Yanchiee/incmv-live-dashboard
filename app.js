@@ -39,36 +39,46 @@ function rowHtml(cells) {
   return `<tr>${cells.map((cell) => `<td${cell.numeric ? ' class="number"' : ''}>${escapeHtml(cell.value)}</td>`).join('')}</tr>`;
 }
 
+function rowsOrEmpty(rows) {
+  return Array.isArray(rows) ? rows : [];
+}
+
+function renderEmptyRow(columnCount, message = 'No data available yet') {
+  return `<tr><td colspan="${columnCount}">${escapeHtml(message)}</td></tr>`;
+}
+
 function renderRankingCards(id, rows, limit = 10) {
   const element = document.getElementById(id);
   if (!element) return;
-  element.innerHTML = rows.slice(0, limit).map((row) => `
+  const safeRows = rowsOrEmpty(rows).slice(0, limit);
+  element.innerHTML = safeRows.length ? safeRows.map((row) => `
     <article class="ranking-card">
-      <div class="rank">#${row.rank}</div>
-      <img src="${escapeHtml(row.thumbnailUrl)}" alt="${escapeHtml(row.entry)} thumbnail" loading="lazy">
+      <div class="rank">#${escapeHtml(row.rank || '--')}</div>
+      <img src="${escapeHtml(row.thumbnailUrl || '')}" alt="${escapeHtml(row.entry || 'INCMV entry')} thumbnail" loading="lazy">
       <div>
         <p class="entry-title">${escapeHtml(row.entry)}</p>
         <p class="entry-subtitle">${escapeHtml(row.region)} / ${escapeHtml(row.songTitle)}</p>
       </div>
       <div class="views">${number(row.currentViews)} views</div>
     </article>
-  `).join('');
+  `).join('') : '<p class="empty-state">No ranking data available yet.</p>';
 }
 
 function renderRankingTable(id, rows, limit = 20) {
   const element = document.getElementById(id);
   if (!element) return;
+  const safeRows = rowsOrEmpty(rows).slice(0, limit);
   element.innerHTML = `
     <table>
       <thead><tr><th>Rank</th><th>Region</th><th>Entry</th><th>Song</th><th>Views</th></tr></thead>
       <tbody>
-        ${rows.slice(0, limit).map((row) => rowHtml([
+        ${safeRows.length ? safeRows.map((row) => rowHtml([
           { value: row.rank },
           { value: row.region },
           { value: row.entry },
           { value: row.songTitle },
           { value: number(row.currentViews), numeric: true },
-        ])).join('')}
+        ])).join('') : renderEmptyRow(5)}
       </tbody>
     </table>
   `;
@@ -77,15 +87,16 @@ function renderRankingTable(id, rows, limit = 20) {
 function renderSimpleRanking(id, rows, limit = 10) {
   const element = document.getElementById(id);
   if (!element) return;
+  const safeRows = rowsOrEmpty(rows).slice(0, limit);
   element.innerHTML = `
     <table>
       <thead><tr><th>Rank</th><th>Entry</th><th>Views</th></tr></thead>
       <tbody>
-        ${rows.slice(0, limit).map((row) => rowHtml([
+        ${safeRows.length ? safeRows.map((row) => rowHtml([
           { value: row.rank },
           { value: row.entry },
           { value: number(row.currentViews), numeric: true },
-        ])).join('')}
+        ])).join('') : renderEmptyRow(3)}
       </tbody>
     </table>
   `;
@@ -94,15 +105,16 @@ function renderSimpleRanking(id, rows, limit = 10) {
 function renderLokalTable(id, rows, limit = 20) {
   const element = document.getElementById(id);
   if (!element) return;
+  const safeRows = rowsOrEmpty(rows).slice(0, limit);
   element.innerHTML = `
     <table>
       <thead><tr><th>Rank</th><th>Lokal</th><th>Comments</th></tr></thead>
       <tbody>
-        ${rows.slice(0, limit).map((row) => rowHtml([
+        ${safeRows.length ? safeRows.map((row) => rowHtml([
           { value: row.rank },
           { value: row.lokal },
           { value: number(row.matchedComments), numeric: true },
-        ])).join('')}
+        ])).join('') : renderEmptyRow(3)}
       </tbody>
     </table>
   `;
@@ -111,28 +123,31 @@ function renderLokalTable(id, rows, limit = 20) {
 function renderMonitoringTable(id, rows, limit = 18) {
   const element = document.getElementById(id);
   if (!element) return;
+  const safeRows = rowsOrEmpty(rows).slice(0, limit);
   element.innerHTML = `
     <table>
       <thead><tr><th>Rank</th><th>Name / Username</th><th>Comments</th><th>Latest</th></tr></thead>
       <tbody>
-        ${rows.slice(0, limit).map((row) => rowHtml([
+        ${safeRows.length ? safeRows.map((row) => rowHtml([
           { value: row.rank },
           { value: row.name ? `${row.name} - ${row.username}` : row.username },
           { value: number(row.totalComments), numeric: true },
           { value: row.latestCommentTime || '' },
-        ])).join('')}
+        ])).join('') : renderEmptyRow(4)}
       </tbody>
     </table>
   `;
 }
 
 function renderKapisanan(rows) {
-  const total = rows.find((row) => row.keyword === 'Total Comments')?.matchedComments
-    || rows.reduce((sum, row) => sum + row.matchedComments, 0);
+  const safeRows = rowsOrEmpty(rows);
+  const total = safeRows.find((row) => row.keyword === 'Total Comments')?.matchedComments
+    || safeRows.reduce((sum, row) => sum + (Number(row.matchedComments) || 0), 0);
   text('kapisanan-total', `${number(total)} total`);
-  const max = Math.max(...rows.filter((row) => row.keyword !== 'Total Comments').map((row) => row.matchedComments), 1);
+  const max = Math.max(...safeRows.filter((row) => row.keyword !== 'Total Comments').map((row) => Number(row.matchedComments) || 0), 1);
   const element = document.getElementById('kapisanan-bars');
-  element.innerHTML = rows
+  if (!element) return;
+  element.innerHTML = safeRows
     .filter((row) => row.keyword !== 'Total Comments')
     .map((row) => `
       <div class="bar-row">
@@ -144,7 +159,9 @@ function renderKapisanan(rows) {
 
 function renderComments(rows) {
   const element = document.getElementById('latest-comments');
-  element.innerHTML = rows.map((row) => `
+  if (!element) return;
+  const safeRows = rowsOrEmpty(rows);
+  element.innerHTML = safeRows.length ? safeRows.map((row) => `
     <article class="comment">
       <div class="comment-meta">
         <span>${escapeHtml(row.commenterName)}</span>
@@ -152,16 +169,19 @@ function renderComments(rows) {
       </div>
       <p>${escapeHtml(row.commentText)}</p>
     </article>
-  `).join('');
+  `).join('') : '<p class="empty-state">No recent comments available yet.</p>';
 }
 
 function renderDashboard(data) {
   state.data = data;
-  const benguet = data.overview.benguetEntry;
-  const topLokal = data.overview.topLokal;
+  const source = data.source || {};
+  const overview = data.overview || {};
+  const rankings = data.rankings || {};
+  const benguet = overview.benguetEntry;
+  const topLokal = overview.topLokal;
 
-  text('total-comments', number(data.source.fullCommentRows));
-  text('comments-fetched', data.source.fetchedAt || 'No fetch time');
+  text('total-comments', number(source.fullCommentRows));
+  text('comments-fetched', source.fetchedAt || 'No fetch time');
   text('benguet-views', benguet ? number(benguet.currentViews) : '--');
   text('benguet-rank', benguet ? `Global rank #${benguet.rank}` : 'Global rank --');
   text('top-lokal', topLokal?.lokal || '--');
@@ -169,22 +189,22 @@ function renderDashboard(data) {
   const generated = compactTimestamp(data.generatedAt);
   text('generated-time', generated.time);
   text('generated-detail', generated.detail);
-  text('refresh-status', `Updated ${data.generatedAt}`);
+  text('refresh-status', `Updated ${data.generatedAt || 'pending'}`);
 
   const thumb = document.getElementById('benguet-thumb');
   if (thumb && benguet?.thumbnailUrl) thumb.src = benguet.thumbnailUrl;
-  text('benguet-title', benguet?.matchedVideoTitle || data.source.videoTitle || "God's Love | Benguet");
+  text('benguet-title', benguet?.matchedVideoTitle || source.videoTitle || "God's Love | Benguet");
   text('benguet-meta', benguet ? `${number(benguet.currentViews)} views / Global rank #${benguet.rank}` : 'Current views unavailable');
   const link = document.getElementById('benguet-link');
-  if (link) link.href = benguet?.youtubeUrl || data.source.videoUrl || '#';
+  if (link) link.href = benguet?.youtubeUrl || source.videoUrl || '#';
 
   renderKapisanan(data.kapisanan || []);
-  renderRankingCards('global-ranking', data.rankings.global || [], 12);
-  renderRankingTable('philippines-ranking', data.rankings.philippines || [], 40);
-  renderSimpleRanking('luzon-ranking', data.rankings.luzon || [], 12);
-  renderSimpleRanking('visayas-ranking', data.rankings.visayas || [], 12);
-  renderSimpleRanking('mindanao-ranking', data.rankings.mindanao || [], 12);
-  renderSimpleRanking('abroad-ranking', data.rankings.abroad || [], 12);
+  renderRankingCards('global-ranking', rankings.global || [], 12);
+  renderRankingTable('philippines-ranking', rankings.philippines || [], 40);
+  renderSimpleRanking('luzon-ranking', rankings.luzon || [], 12);
+  renderSimpleRanking('visayas-ranking', rankings.visayas || [], 12);
+  renderSimpleRanking('mindanao-ranking', rankings.mindanao || [], 12);
+  renderSimpleRanking('abroad-ranking', rankings.abroad || [], 12);
   renderLokalTable('lokal-ranking', data.lokalSummary || [], 12);
   renderLokalTable('lokal-table', data.lokalSummary || [], 20);
   renderMonitoringTable('kdo-table', data.kdo || [], 24);

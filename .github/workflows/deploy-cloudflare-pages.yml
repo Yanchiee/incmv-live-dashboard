@@ -21,6 +21,11 @@ jobs:
         env:
           RAW_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
+          if [ -z "$RAW_CLOUDFLARE_API_TOKEN" ]; then
+            echo "CLOUDFLARE_API_TOKEN is not configured; relying on the connected Cloudflare Pages Git integration."
+            exit 0
+          fi
+
           export CLOUDFLARE_API_TOKEN="$(printf '%s' "$RAW_CLOUDFLARE_API_TOKEN" | tr -d '\r\n[:space:]')"
           npx --yes wrangler@latest pages deploy . \
             --project-name=incmv-live-dashboard \

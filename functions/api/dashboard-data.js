@@ -1,5 +1,7 @@
+const GITHUB_COMMIT_URL =
+  'https://api.github.com/repos/Yanchiee/incmv-live-dashboard/commits/main';
 const GITHUB_CONTENT_URL =
-  'https://api.github.com/repos/Yanchiee/incmv-live-dashboard/contents/data/dashboard.json?ref=main';
+  'https://api.github.com/repos/Yanchiee/incmv-live-dashboard/contents/data/dashboard.json';
 const GITHUB_RAW_URL =
   'https://raw.githubusercontent.com/Yanchiee/incmv-live-dashboard/main/data/dashboard.json';
 
@@ -14,15 +16,33 @@ function json(body, status = 200) {
   });
 }
 
-async function fetchGithubData(env) {
+async function githubHeaders(env, accept = 'application/vnd.github+json') {
   const headers = {
-    accept: 'application/vnd.github.raw+json',
+    accept,
     'user-agent': 'incmv-live-dashboard-data',
     'x-github-api-version': '2022-11-28',
   };
   if (env.GITHUB_TOKEN) headers.authorization = `Bearer ${env.GITHUB_TOKEN}`;
+  return headers;
+}
 
-  const response = await fetch(`${GITHUB_CONTENT_URL}&t=${Date.now()}`, { headers });
+async function fetchGithubData(env) {
+  let ref = 'main';
+  if (env.GITHUB_TOKEN) {
+    const commitResponse = await fetch(`${GITHUB_COMMIT_URL}?t=${Date.now()}`, {
+      headers: await githubHeaders(env),
+    });
+    if (!commitResponse.ok) {
+      const message = await commitResponse.text();
+      throw new Error(`GitHub latest commit fetch failed: ${commitResponse.status} ${message}`);
+    }
+    const commit = await commitResponse.json();
+    if (commit.sha) ref = commit.sha;
+  }
+
+  const response = await fetch(`${GITHUB_CONTENT_URL}?ref=${encodeURIComponent(ref)}&t=${Date.now()}`, {
+    headers: await githubHeaders(env, 'application/vnd.github.raw+json'),
+  });
   if (response.ok) return response;
 
   if (env.GITHUB_TOKEN) {

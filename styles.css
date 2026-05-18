@@ -391,13 +391,71 @@ td.number {
     position: static;
     align-items: flex-start;
     flex-direction: column;
+    gap: 14px;
+  }
+
+  .status {
+    align-items: flex-start;
+    white-space: normal;
+  }
+
+  main {
+    padding-inline: 12px;
+  }
+
+  .metric {
+    min-height: 112px;
+  }
+
+  .panel,
+  .feature-card {
+    padding: 12px;
+  }
+
+  .panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .ranking-card {
     grid-template-columns: 36px 86px 1fr;
+    gap: 9px;
   }
 
   .ranking-card .views {
     grid-column: 2 / -1;
+  }
+
+  .comment-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+}
+
+@media (max-width: 420px) {
+  h1 {
+    font-size: 1.45rem;
+  }
+
+  .metric strong {
+    font-size: 1.55rem;
+  }
+
+  .ranking-card {
+    grid-template-columns: 1fr;
+  }
+
+  .rank {
+    text-align: left;
+  }
+
+  .ranking-card img {
+    width: 100%;
+  }
+
+  .ranking-card .views {
+    grid-column: auto;
   }
 }

@@ -424,6 +424,8 @@ function extractPlaylistVideos(data, region, group, playlistId, seen) {
           songTitle,
           title,
           views: parseViews(videoInfo),
+          viewsExact: false,
+          viewCountSource: 'playlist rounded text',
           published,
           fetchedFrom: `${region} playlist`,
         });
@@ -482,7 +484,11 @@ async function hydrateVideoFromPlayer(video) {
   if (!playerInnertubeConfig?.key) throw new Error('Missing YouTube player config');
   const json = await postInnertube('player', playerInnertubeConfig, { videoId: video.videoId });
   const exactViews = Number(json.videoDetails?.viewCount);
-  if (Number.isFinite(exactViews) && exactViews > 0) video.views = exactViews;
+  if (Number.isFinite(exactViews) && exactViews > 0) {
+    video.views = exactViews;
+    video.viewsExact = true;
+    video.viewCountSource = 'youtube player exact viewCount';
+  }
   const publishDate = json.microformat?.playerMicroformatRenderer?.publishDate;
   if (publishDate) video.published = publishDate;
 }
@@ -501,11 +507,39 @@ async function hydrateVideo(video) {
       html.match(/"viewCount":"(\d+)"/) ||
       html.match(/"view_count":(\d+)/) ||
       html.match(/"views":\{"simpleText":"([^"]+)"/);
-    if (viewMatch) video.views = /^\d+$/.test(viewMatch[1]) ? Number(viewMatch[1]) : parseViews(viewMatch[1]);
+    if (viewMatch) {
+      const rawViews = viewMatch[1];
+      video.views = /^\d+$/.test(rawViews) ? Number(rawViews) : parseViews(rawViews);
+      if (/^\d[\d,]*\s*(views?)?$/i.test(rawViews.trim())) {
+        video.viewsExact = true;
+        video.viewCountSource = 'watch page exact viewCount';
+      }
+    }
     const dateMatch = html.match(/"publishDate":"([^"]+)"/) || html.match(/"datePublished":"([^"]+)"/);
     if (dateMatch) video.published = dateMatch[1];
   } catch (error) {
     video.notes = `${video.notes}; watch page view fetch failed: ${error.message}`;
+  }
+}
+
+function previousExactViewMap(previousPayload) {
+  const rows = Object.values(previousPayload?.rankings || {}).flat();
+  return new Map(
+    rows
+      .filter((row) => row?.youtubeUrl && row.viewCountExact === true)
+      .map((row) => [row.youtubeUrl.split('v=').at(-1)?.split('&')[0], row]),
+  );
+}
+
+function preservePreviousExactViews(videos, previousPayload) {
+  const previousByVideoId = previousExactViewMap(previousPayload);
+  for (const video of videos) {
+    if (video.viewsExact) continue;
+    const previous = previousByVideoId.get(video.videoId);
+    if (!previous?.currentViews) continue;
+    video.views = previous.currentViews;
+    video.viewsExact = true;
+    video.viewCountSource = 'previous exact viewCount retained';
   }
 }
 
@@ -546,10 +580,12 @@ function rankingRows(videos, limit = 150) {
     youtubeUrl: `https://www.youtube.com/watch?v=${video.videoId}`,
     thumbnailUrl: thumbnailFromVideoId(video.videoId),
     fetchedAt: fetchedAtText(),
+    viewCountExact: Boolean(video.viewsExact),
+    viewCountSource: video.viewCountSource || 'unknown',
   }));
 }
 
-async function fetchIncmvRankings() {
+async function fetchIncmvRankings(previousPayload) {
   const allVideos = [];
   for (const [region, group, playlistId, minimumCount] of playlists) {
     const entries = await collectPlaylist(region, group, playlistId, minimumCount);
@@ -557,6 +593,7 @@ async function fetchIncmvRankings() {
     allVideos.push(...entries);
   }
   await hydrateAllVideos(allVideos);
+  preservePreviousExactViews(allVideos, previousPayload);
   return {
     global: rankingRows(allVideos),
     philippines: rankingRows(allVideos.filter((video) => video.group === 'Philippines')),
@@ -694,7 +731,7 @@ const [commentResult, rankings] = await Promise.all([
   fetchBenguetComments()
     .then((data) => ({ ok: true, data }))
     .catch((error) => ({ ok: false, error })),
-  fetchIncmvRankings(),
+  fetchIncmvRankings(previousPayload),
 ]);
 
 let commentData = null;

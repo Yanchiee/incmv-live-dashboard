@@ -60,8 +60,7 @@ jobs:
           export CLOUDFLARE_API_TOKEN="$(printf '%s' "$RAW_CLOUDFLARE_API_TOKEN" | tr -d '\r\n[:space:]')"
           npx --yes wrangler@latest pages deploy . \
             --project-name=incmv-live-dashboard \
-            --branch=main \
-            --account-id=1adbe6308690a1d3ce7fb732fa17e859
+            --branch=main
 
       - name: Verify generated data
         run: |

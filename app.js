@@ -197,9 +197,11 @@ function renderDashboard(data) {
   text('generated-time', generated.time);
   text('generated-detail', generated.detail);
   if (state.refreshQueuedAt && data.generatedAt && data.generatedAt !== state.refreshStartedFrom) {
-    clearRefreshQueue(`Refresh complete: ${data.generatedAt}`);
+    const statusNote = source.refreshStatus && source.refreshStatus !== 'fresh' ? ` (${source.refreshStatus})` : '';
+    clearRefreshQueue(`Refresh complete: ${data.generatedAt}${statusNote}`);
   } else if (!state.refreshQueuedAt) {
-    text('refresh-status', `Updated ${data.generatedAt || 'pending'}`);
+    const statusNote = source.refreshStatus && source.refreshStatus !== 'fresh' ? ` (${source.refreshStatus})` : '';
+    text('refresh-status', `Updated ${data.generatedAt || 'pending'}${statusNote}`);
   } else if (previousGeneratedAt !== data.generatedAt) {
     text('refresh-status', `Refresh queued. Waiting for new data...`);
   }

@@ -548,6 +548,14 @@ async function fetchIncmvRankings() {
   };
 }
 
+async function readPreviousPayload() {
+  try {
+    return JSON.parse(await fs.readFile(outFile, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 function normalizeHandle(value) {
   return String(value || '').trim().replace(/^@+/, '').toLowerCase();
 }
@@ -661,20 +669,38 @@ function buildLatestComments(comments, limit = 25) {
   }));
 }
 
-const [commentData, rankings] = await Promise.all([
-  fetchBenguetComments(),
+const generatedAt = manilaDateTime();
+const previousPayload = await readPreviousPayload();
+const [commentResult, rankings] = await Promise.all([
+  fetchBenguetComments()
+    .then((data) => ({ ok: true, data }))
+    .catch((error) => ({ ok: false, error })),
   fetchIncmvRankings(),
 ]);
 
-const comments = commentData.comments;
-const generatedAt = manilaDateTime();
-const sourceFetchedAt = fetchedAtText(new Date(commentData.metadata.fetchedAt));
-const lokalSummary = buildLokalSummary(comments);
-const kapisanan = buildKapisanan(comments);
+let commentData = null;
+let comments = [];
+let source;
+let lokalSummary;
+let kapisanan;
+let kdo;
+let districtOfficerRows;
+let compoundMonitoringRows;
+let latestComments;
+let topLokal;
 
-const payload = {
-  generatedAt,
-  source: {
+if (commentResult.ok) {
+  commentData = commentResult.data;
+  comments = commentData.comments;
+  const sourceFetchedAt = fetchedAtText(new Date(commentData.metadata.fetchedAt));
+  lokalSummary = buildLokalSummary(comments);
+  kapisanan = buildKapisanan(comments);
+  kdo = buildMonitoring(comments, kdoOfficers, 24);
+  districtOfficerRows = buildSimpleMonitoring(comments, districtOfficers);
+  compoundMonitoringRows = buildSimpleMonitoring(comments, compoundMonitoring);
+  latestComments = buildLatestComments(comments);
+  topLokal = lokalSummary[0] || null;
+  source = {
     videoTitle: commentData.metadata.videoTitle,
     videoUrl: commentData.metadata.videoUrl,
     fetchedAt: sourceFetchedAt,
@@ -682,20 +708,41 @@ const payload = {
     fullCommentRows: commentData.metadata.uniqueComments,
     kapisananRows: kapisanan.reduce((total, row) => total + row.matchedComments, 0),
     lokalTabs: lokals.length,
-  },
+    refreshStatus: 'fresh',
+  };
+} else {
+  if (!previousPayload) throw commentResult.error;
+  console.error(`Comment refresh failed; reusing previous comment metrics: ${commentResult.error.message}`);
+  source = {
+    ...(previousPayload.source || {}),
+    workbookUpdatedAt: updatedAtText(),
+    refreshStatus: `comments reused after YouTube rate limit: ${commentResult.error.message}`,
+  };
+  lokalSummary = previousPayload.lokalSummary || [];
+  kapisanan = previousPayload.kapisanan || [];
+  kdo = previousPayload.kdo || [];
+  districtOfficerRows = previousPayload.districtOfficers || [];
+  compoundMonitoringRows = previousPayload.compoundMonitoring || [];
+  latestComments = previousPayload.latestComments || [];
+  topLokal = previousPayload.overview?.topLokal || lokalSummary[0] || null;
+}
+
+const payload = {
+  generatedAt,
+  source,
   overview: {
     benguetEntry: findBenguetEntry(rankings.global),
     topGlobal: rankings.global[0] || null,
     topPhilippines: rankings.philippines[0] || null,
-    topLokal: lokalSummary[0] || null,
+    topLokal,
   },
   rankings,
   lokalSummary,
   kapisanan,
-  kdo: buildMonitoring(comments, kdoOfficers, 24),
-  districtOfficers: buildSimpleMonitoring(comments, districtOfficers),
-  compoundMonitoring: buildSimpleMonitoring(comments, compoundMonitoring),
-  latestComments: buildLatestComments(comments),
+  kdo,
+  districtOfficers: districtOfficerRows,
+  compoundMonitoring: compoundMonitoringRows,
+  latestComments,
 };
 
 await fs.mkdir(dataDir, { recursive: true });

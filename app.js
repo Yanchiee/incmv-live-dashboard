@@ -1,14 +1,19 @@
 const DATA_URL = 'https://api.github.com/repos/Yanchiee/incmv-live-dashboard/contents/data/dashboard.json?ref=main';
 const REFRESH_API_URL = './api/refresh';
+const REFRESH_STATUS_API_URL = './api/refresh-status';
 const REFRESH_MS = 60 * 1000;
 const REFRESH_POLL_MS = 30 * 1000;
 const REFRESH_TIMEOUT_MS = 18 * 60 * 1000;
+const REFRESH_PROGRESS_MS = 7000;
 
 const state = {
   data: null,
   refreshQueuedAt: 0,
   refreshStartedFrom: '',
   refreshPollTimer: null,
+  refreshProgressTimer: null,
+  refreshCode: '',
+  refreshRunStatus: '',
 };
 
 const formatNumber = new Intl.NumberFormat('en-US');
@@ -16,6 +21,11 @@ const formatNumber = new Intl.NumberFormat('en-US');
 function text(id, value) {
   const element = document.getElementById(id);
   if (element) element.textContent = value;
+}
+
+function setRefreshMessage(status, detail = '') {
+  text('refresh-status', status);
+  text('refresh-detail', detail || 'Browser checks every minute');
 }
 
 function number(value) {
@@ -198,12 +208,12 @@ function renderDashboard(data) {
   text('generated-detail', generated.detail);
   if (state.refreshQueuedAt && data.generatedAt && data.generatedAt !== state.refreshStartedFrom) {
     const statusNote = source.refreshStatus && source.refreshStatus !== 'fresh' ? ` (${source.refreshStatus})` : '';
-    clearRefreshQueue(`Refresh complete: ${data.generatedAt}${statusNote}`);
+    clearRefreshQueue(`Refresh complete: ${data.generatedAt}${statusNote}`, 'Latest dashboard data has loaded on this page.');
   } else if (!state.refreshQueuedAt) {
     const statusNote = source.refreshStatus && source.refreshStatus !== 'fresh' ? ` (${source.refreshStatus})` : '';
-    text('refresh-status', `Updated ${data.generatedAt || 'pending'}${statusNote}`);
+    setRefreshMessage(`Updated ${data.generatedAt || 'pending'}${statusNote}`, 'Browser checks every minute for newer data.');
   } else if (previousGeneratedAt !== data.generatedAt) {
-    text('refresh-status', `Refresh queued. Waiting for new data...`);
+    setRefreshMessage('Refresh queued. Waiting for new data...', currentRefreshDetail());
   }
 
   const thumb = document.getElementById('benguet-thumb');
@@ -237,7 +247,7 @@ async function loadDashboard() {
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     renderDashboard(await response.json());
   } catch (error) {
-    text('refresh-status', `Data unavailable: ${error.message}`);
+    setRefreshMessage(`Data unavailable: ${error.message}`, 'The page will try again on the next automatic check.');
   }
 }
 
@@ -248,24 +258,78 @@ function setRefreshButtonBusy(isBusy, label = 'Refresh Now') {
   button.textContent = label;
 }
 
-function clearRefreshQueue(message) {
+function clearRefreshQueue(message, detail = '') {
   state.refreshQueuedAt = 0;
   state.refreshStartedFrom = '';
+  state.refreshRunStatus = '';
   if (state.refreshPollTimer) {
     clearInterval(state.refreshPollTimer);
     state.refreshPollTimer = null;
   }
+  if (state.refreshProgressTimer) {
+    clearInterval(state.refreshProgressTimer);
+    state.refreshProgressTimer = null;
+  }
   setRefreshButtonBusy(false);
-  text('refresh-status', message);
+  setRefreshMessage(message, detail);
+}
+
+function currentRefreshDetail() {
+  if (!state.refreshQueuedAt) return 'Browser checks every minute for newer data.';
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - state.refreshQueuedAt) / 1000));
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  const elapsedLabel = elapsedMinutes > 0 ? `${elapsedMinutes} min ${elapsedSeconds % 60}s` : `${elapsedSeconds}s`;
+  const reason = 'This can take a few minutes because GitHub starts a cloud job, YouTube pages and playlists are fetched, then the dashboard file is rebuilt.';
+  if (state.refreshRunStatus === 'queued') return `Queued in GitHub Actions. ${reason}`;
+  if (state.refreshRunStatus === 'in_progress') return `Running for ${elapsedLabel}. Fetching YouTube data and rebuilding the dashboard.`;
+  if (state.refreshRunStatus === 'completed:success') return 'GitHub finished successfully. Loading the newest dashboard data now.';
+  if (state.refreshRunStatus?.startsWith('completed:')) return 'GitHub finished but reported a problem. The previous dashboard data is still available.';
+  if (elapsedSeconds < 20) return `Starting the cloud refresh. ${reason}`;
+  if (elapsedSeconds < 90) return `Cloud job is starting. ${reason}`;
+  if (elapsedSeconds < 240) return `Still running after ${elapsedLabel}. YouTube fetches are the slowest part.`;
+  return `Still waiting after ${elapsedLabel}. Large playlist/comment fetches or YouTube rate limits can slow this down.`;
+}
+
+function updateRefreshProgress() {
+  if (!state.refreshQueuedAt) return;
+  setRefreshMessage('Refreshing live dashboard...', currentRefreshDetail());
+}
+
+async function loadRefreshRunStatus() {
+  if (!state.refreshQueuedAt || !state.refreshCode) return null;
+  try {
+    const response = await fetch(`${REFRESH_STATUS_API_URL}?v=${Date.now()}`, {
+      headers: { 'x-refresh-code': state.refreshCode },
+    });
+    if (!response.ok) return null;
+    const result = await response.json();
+    const run = result.run;
+    if (!run) return null;
+    state.refreshRunStatus = `${run.status}${run.conclusion ? `:${run.conclusion}` : ''}`;
+    return run;
+  } catch {
+    return null;
+  }
 }
 
 async function pollForRefreshResult() {
   if (!state.refreshQueuedAt) return;
   if (Date.now() - state.refreshQueuedAt > REFRESH_TIMEOUT_MS) {
-    clearRefreshQueue('Refresh queued, but new data did not arrive yet. It may still be running in GitHub.');
+    clearRefreshQueue(
+      'Refresh queued, but new data did not arrive yet.',
+      'The GitHub job may still be running or YouTube may be rate-limiting the fetch. Try again in a few minutes.',
+    );
     return;
   }
+  const run = await loadRefreshRunStatus();
+  updateRefreshProgress();
   await loadDashboard();
+  if (run?.status === 'completed' && run.conclusion !== 'success' && state.refreshStartedFrom === state.data?.generatedAt) {
+    clearRefreshQueue(
+      'Refresh did not finish successfully.',
+      'The previous dashboard data is still shown. GitHub or YouTube may have returned a temporary error.',
+    );
+  }
 }
 
 async function requestRefreshNow() {
@@ -278,8 +342,12 @@ async function requestRefreshNow() {
     localStorage.setItem(codeKey, refreshCode);
   }
 
+  state.refreshCode = refreshCode;
   setRefreshButtonBusy(true, 'Queueing...');
-  text('refresh-status', 'Queueing full dashboard refresh...');
+  setRefreshMessage(
+    'Queueing full dashboard refresh...',
+    'Please wait a few minutes. GitHub will fetch YouTube comments, playlist views, and rebuild the dashboard data.',
+  );
 
   try {
     const response = await fetch(REFRESH_API_URL, {
@@ -303,14 +371,17 @@ async function requestRefreshNow() {
 
     state.refreshQueuedAt = Date.now();
     state.refreshStartedFrom = state.data?.generatedAt || '';
-    setRefreshButtonBusy(true, 'Refresh Queued');
-    text('refresh-status', 'Refresh queued. Waiting for GitHub to rebuild the data...');
+    state.refreshRunStatus = 'queued';
+    setRefreshButtonBusy(true, 'Refreshing...');
+    updateRefreshProgress();
     if (state.refreshPollTimer) clearInterval(state.refreshPollTimer);
+    if (state.refreshProgressTimer) clearInterval(state.refreshProgressTimer);
     state.refreshPollTimer = setInterval(pollForRefreshResult, REFRESH_POLL_MS);
+    state.refreshProgressTimer = setInterval(updateRefreshProgress, REFRESH_PROGRESS_MS);
     setTimeout(pollForRefreshResult, 8000);
   } catch (error) {
     setRefreshButtonBusy(false);
-    text('refresh-status', `Refresh unavailable: ${error.message}`);
+    setRefreshMessage(`Refresh unavailable: ${error.message}`, 'Check the refresh code or try again shortly.');
   }
 }
 

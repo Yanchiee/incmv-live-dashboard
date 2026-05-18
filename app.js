@@ -1,4 +1,4 @@
-const DATA_URL = 'https://raw.githubusercontent.com/Yanchiee/incmv-live-dashboard/main/data/dashboard.json';
+const DATA_URL = 'https://api.github.com/repos/Yanchiee/incmv-live-dashboard/contents/data/dashboard.json?ref=main';
 const REFRESH_MS = 60 * 1000;
 
 const state = {
@@ -214,7 +214,11 @@ function renderDashboard(data) {
 
 async function loadDashboard() {
   try {
-    const response = await fetch(`${DATA_URL}?v=${Date.now()}`, { cache: 'no-store' });
+    const separator = DATA_URL.includes('?') ? '&' : '?';
+    const response = await fetch(`${DATA_URL}${separator}v=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { accept: 'application/vnd.github.raw+json' },
+    });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     renderDashboard(await response.json());
   } catch (error) {

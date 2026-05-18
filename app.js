@@ -1,4 +1,4 @@
-const DATA_URL = 'https://api.github.com/repos/Yanchiee/incmv-live-dashboard/contents/data/dashboard.json?ref=main';
+const DATA_URL = './data/dashboard.json';
 const REFRESH_API_URL = './api/refresh';
 const REFRESH_STATUS_API_URL = './api/refresh-status';
 const REFRESH_MS = 60 * 1000;

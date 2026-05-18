@@ -526,7 +526,12 @@ function previousExactViewMap(previousPayload) {
   const rows = Object.values(previousPayload?.rankings || {}).flat();
   return new Map(
     rows
-      .filter((row) => row?.youtubeUrl && row.viewCountExact === true)
+      .filter((row) => {
+        if (!row?.youtubeUrl || !row.currentViews) return false;
+        if (row.viewCountExact === true) return true;
+        if (!row.viewCountSource) return true;
+        return row.viewCountSource !== 'playlist rounded text';
+      })
       .map((row) => [row.youtubeUrl.split('v=').at(-1)?.split('&')[0], row]),
   );
 }

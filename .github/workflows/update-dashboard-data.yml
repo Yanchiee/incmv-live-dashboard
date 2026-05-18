@@ -44,7 +44,18 @@ jobs:
 
           git add data/dashboard.json
           git commit -m "Update live dashboard data $(TZ=Asia/Manila date '+%Y-%m-%d %H:%M')"
-          git push
+          for attempt in 1 2 3; do
+            if git push; then
+              break
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "Dashboard data push failed after $attempt attempts."
+              exit 1
+            fi
+
+            git pull --rebase origin main
+          done
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify generated data

@@ -1,8 +1,14 @@
 const DATA_URL = 'https://api.github.com/repos/Yanchiee/incmv-live-dashboard/contents/data/dashboard.json?ref=main';
+const REFRESH_API_URL = './api/refresh';
 const REFRESH_MS = 60 * 1000;
+const REFRESH_POLL_MS = 30 * 1000;
+const REFRESH_TIMEOUT_MS = 18 * 60 * 1000;
 
 const state = {
   data: null,
+  refreshQueuedAt: 0,
+  refreshStartedFrom: '',
+  refreshPollTimer: null,
 };
 
 const formatNumber = new Intl.NumberFormat('en-US');
@@ -173,6 +179,7 @@ function renderComments(rows) {
 }
 
 function renderDashboard(data) {
+  const previousGeneratedAt = state.data?.generatedAt || '';
   state.data = data;
   const source = data.source || {};
   const overview = data.overview || {};
@@ -189,7 +196,13 @@ function renderDashboard(data) {
   const generated = compactTimestamp(data.generatedAt);
   text('generated-time', generated.time);
   text('generated-detail', generated.detail);
-  text('refresh-status', `Updated ${data.generatedAt || 'pending'}`);
+  if (state.refreshQueuedAt && data.generatedAt && data.generatedAt !== state.refreshStartedFrom) {
+    clearRefreshQueue(`Refresh complete: ${data.generatedAt}`);
+  } else if (!state.refreshQueuedAt) {
+    text('refresh-status', `Updated ${data.generatedAt || 'pending'}`);
+  } else if (previousGeneratedAt !== data.generatedAt) {
+    text('refresh-status', `Refresh queued. Waiting for new data...`);
+  }
 
   const thumb = document.getElementById('benguet-thumb');
   if (thumb && benguet?.thumbnailUrl) thumb.src = benguet.thumbnailUrl;
@@ -226,6 +239,79 @@ async function loadDashboard() {
   }
 }
 
+function setRefreshButtonBusy(isBusy, label = 'Refresh Now') {
+  const button = document.getElementById('refresh-now');
+  if (!button) return;
+  button.disabled = isBusy;
+  button.textContent = label;
+}
+
+function clearRefreshQueue(message) {
+  state.refreshQueuedAt = 0;
+  state.refreshStartedFrom = '';
+  if (state.refreshPollTimer) {
+    clearInterval(state.refreshPollTimer);
+    state.refreshPollTimer = null;
+  }
+  setRefreshButtonBusy(false);
+  text('refresh-status', message);
+}
+
+async function pollForRefreshResult() {
+  if (!state.refreshQueuedAt) return;
+  if (Date.now() - state.refreshQueuedAt > REFRESH_TIMEOUT_MS) {
+    clearRefreshQueue('Refresh queued, but new data did not arrive yet. It may still be running in GitHub.');
+    return;
+  }
+  await loadDashboard();
+}
+
+async function requestRefreshNow() {
+  const codeKey = 'incmv-refresh-code';
+  let refreshCode = localStorage.getItem(codeKey) || '';
+  if (!refreshCode) {
+    refreshCode = window.prompt('Enter the refresh code for this dashboard:') || '';
+    refreshCode = refreshCode.trim();
+    if (!refreshCode) return;
+    localStorage.setItem(codeKey, refreshCode);
+  }
+
+  setRefreshButtonBusy(true, 'Queueing...');
+  text('refresh-status', 'Queueing full dashboard refresh...');
+
+  try {
+    const response = await fetch(REFRESH_API_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-refresh-code': refreshCode,
+      },
+      body: JSON.stringify({
+        generatedAt: state.data?.generatedAt || '',
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem(codeKey);
+    }
+    if (!response.ok) {
+      throw new Error(result.error || `${response.status} ${response.statusText}`);
+    }
+
+    state.refreshQueuedAt = Date.now();
+    state.refreshStartedFrom = state.data?.generatedAt || '';
+    setRefreshButtonBusy(true, 'Refresh Queued');
+    text('refresh-status', 'Refresh queued. Waiting for GitHub to rebuild the data...');
+    if (state.refreshPollTimer) clearInterval(state.refreshPollTimer);
+    state.refreshPollTimer = setInterval(pollForRefreshResult, REFRESH_POLL_MS);
+    setTimeout(pollForRefreshResult, 8000);
+  } catch (error) {
+    setRefreshButtonBusy(false);
+    text('refresh-status', `Refresh unavailable: ${error.message}`);
+  }
+}
+
 function setupTabs() {
   document.querySelectorAll('.tab').forEach((button) => {
     button.addEventListener('click', () => {
@@ -238,5 +324,6 @@ function setupTabs() {
 }
 
 setupTabs();
+document.getElementById('refresh-now')?.addEventListener('click', requestRefreshNow);
 loadDashboard();
 setInterval(loadDashboard, REFRESH_MS);

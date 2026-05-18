@@ -66,3 +66,21 @@ jobs:
       - name: Verify generated data
         run: |
           node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync("data/dashboard.json", "utf8")); if (!data.source?.fullCommentRows) throw new Error("Missing comment count"); if (!data.overview?.benguetEntry?.currentViews) throw new Error("Missing Benguet views"); if ((data.rankings?.global || []).length < 100) throw new Error("Global ranking is unexpectedly short"); console.log(JSON.stringify({ generatedAt: data.generatedAt, comments: data.source.fullCommentRows, benguetViews: data.overview.benguetEntry.currentViews, globalRows: data.rankings.global.length }, null, 2));'
+
+      - name: Notify Slack
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL is not configured; skipping Slack notification."
+            exit 0
+          fi
+
+          if [ -f data/dashboard.json ]; then
+            SUMMARY="$(node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync("data/dashboard.json", "utf8")); process.stdout.write(`Website dashboard update ${process.env.JOB_STATUS}. Updated: ${data.generatedAt}. Comments: ${data.source.fullCommentRows}. Benguet views: ${data.overview.benguetEntry.currentViews}.`)')"
+          else
+            SUMMARY="Website dashboard update ${JOB_STATUS}. data/dashboard.json was not generated."
+          fi
+          SUMMARY="$SUMMARY" node -e 'fetch(process.env.SLACK_WEBHOOK_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: process.env.SUMMARY }) }).then((response) => { if (!response.ok) throw new Error(`Slack webhook failed: ${response.status}`); })'

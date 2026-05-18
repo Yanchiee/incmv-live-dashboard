@@ -13,6 +13,23 @@ the public YouTube comments and official INCMV playlist rankings, rewrites
 reads that JSON directly from the GitHub `main` branch, so scheduled number
 updates do not require a Cloudflare deploy.
 
+## Manual refresh button
+
+The dashboard includes a `Refresh Now` button. It calls the Cloudflare Pages
+Function at `/api/refresh`, which dispatches the GitHub Actions updater.
+
+Cloudflare Pages needs these secrets configured before the button can queue a
+real refresh:
+
+- `REFRESH_CODE`: the private code entered in the dashboard prompt.
+- `GITHUB_TOKEN`: a GitHub token with permission to dispatch workflows for this
+  repository.
+
+For Slack notifications from GitHub Actions, add this GitHub repository secret:
+
+- `SLACK_WEBHOOK_URL`: an incoming Slack webhook URL for the target channel or
+  DM.
+
 ## Deployments
 
 GitHub pushes to `main` deploy this folder to the existing Cloudflare Pages

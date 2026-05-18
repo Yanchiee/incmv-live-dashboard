@@ -78,12 +78,38 @@ main {
   white-space: nowrap;
 }
 
+.status-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .status-dot {
   width: 10px;
   height: 10px;
   border-radius: 999px;
   background: var(--green);
   box-shadow: 0 0 0 5px rgba(22, 121, 79, 0.12);
+}
+
+.refresh-button {
+  border: 1px solid var(--blue);
+  border-radius: 6px;
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 900;
+  padding: 10px 13px;
+  white-space: nowrap;
+}
+
+.refresh-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 .overview-grid {
@@ -397,6 +423,17 @@ td.number {
   .status {
     align-items: flex-start;
     white-space: normal;
+  }
+
+  .status-panel {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .refresh-button {
+    width: 100%;
   }
 
   main {

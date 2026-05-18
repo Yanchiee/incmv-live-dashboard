@@ -3,8 +3,8 @@ name: Update Dashboard Data
 on:
   workflow_dispatch:
   schedule:
-    # GitHub cron is UTC. These are 8 AM through 12 MN in Asia/Manila.
-    - cron: '0 0,2,4,6,8,10,12,14,16 * * *'
+    # GitHub cron is UTC. This is hourly from 8 AM through 12 MN in Asia/Manila.
+    - cron: '0 0-16 * * *'
 
 concurrency:
   group: update-dashboard-data

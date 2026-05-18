@@ -18,6 +18,8 @@ const playlists = [
   ['Abroad', 'Abroad', 'PLaOv-asq4ONGHUCg_S3mP9WGdipeQSS6m', 40],
 ];
 
+let playerInnertubeConfig = null;
+
 const kapisananKeywords = ['BUKLOD', 'KADIWA', 'BINHI', 'PNK'];
 
 const kdoOfficers = [
@@ -435,6 +437,7 @@ function extractPlaylistVideos(data, region, group, playlistId, seen) {
 async function collectPlaylistOnce(region, group, playlistId) {
   const html = await fetchText(`https://www.youtube.com/playlist?list=${playlistId}`);
   const config = innertubeConfig(html);
+  if (!playerInnertubeConfig?.key && config.key) playerInnertubeConfig = config;
   const data = parseEmbeddedJson(html, 'var ytInitialData = ');
   if (!data) throw new Error(`Could not parse playlist data for ${region}`);
   const seen = new Set();
@@ -475,7 +478,23 @@ async function collectPlaylist(region, group, playlistId, minimumCount) {
   return last;
 }
 
+async function hydrateVideoFromPlayer(video) {
+  if (!playerInnertubeConfig?.key) throw new Error('Missing YouTube player config');
+  const json = await postInnertube('player', playerInnertubeConfig, { videoId: video.videoId });
+  const exactViews = Number(json.videoDetails?.viewCount);
+  if (Number.isFinite(exactViews) && exactViews > 0) video.views = exactViews;
+  const publishDate = json.microformat?.playerMicroformatRenderer?.publishDate;
+  if (publishDate) video.published = publishDate;
+}
+
 async function hydrateVideo(video) {
+  try {
+    await hydrateVideoFromPlayer(video);
+    return;
+  } catch (error) {
+    video.notes = `player exact view fetch failed: ${error.message}`;
+  }
+
   try {
     const html = await fetchText(`https://www.youtube.com/watch?v=${video.videoId}`);
     const viewMatch =
@@ -486,7 +505,7 @@ async function hydrateVideo(video) {
     const dateMatch = html.match(/"publishDate":"([^"]+)"/) || html.match(/"datePublished":"([^"]+)"/);
     if (dateMatch) video.published = dateMatch[1];
   } catch (error) {
-    video.notes = `watch page view fetch failed: ${error.message}`;
+    video.notes = `${video.notes}; watch page view fetch failed: ${error.message}`;
   }
 }
 

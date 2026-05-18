@@ -11,14 +11,9 @@ function json(body, status = 200) {
   });
 }
 
-export async function onRequestGet({ request, env }) {
-  const refreshCode = request.headers.get('x-refresh-code') || '';
-  if (!env.REFRESH_CODE || !env.GITHUB_TOKEN) {
+export async function onRequestGet({ env }) {
+  if (!env.GITHUB_TOKEN) {
     return json({ error: 'Refresh status is not configured yet.' }, 503);
-  }
-
-  if (refreshCode !== env.REFRESH_CODE) {
-    return json({ error: 'Invalid refresh code.' }, 403);
   }
 
   const response = await fetch(RUNS_URL, {

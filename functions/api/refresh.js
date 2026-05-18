@@ -11,20 +11,14 @@ function json(body, status = 200) {
   });
 }
 
-export async function onRequestPost({ request, env }) {
-  const refreshCode = request.headers.get('x-refresh-code') || '';
-  if (!env.REFRESH_CODE || !env.GITHUB_TOKEN) {
+export async function onRequestPost({ env }) {
+  if (!env.GITHUB_TOKEN) {
     return json(
       {
-        error:
-          'Refresh is not configured yet. Add REFRESH_CODE and GITHUB_TOKEN secrets to Cloudflare Pages.',
+        error: 'Refresh is not configured yet. Add GITHUB_TOKEN to Cloudflare Pages.',
       },
       503,
     );
-  }
-
-  if (refreshCode !== env.REFRESH_CODE) {
-    return json({ error: 'Invalid refresh code.' }, 403);
   }
 
   const response = await fetch(GITHUB_WORKFLOW_URL, {

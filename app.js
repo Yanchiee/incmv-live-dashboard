@@ -12,7 +12,6 @@ const state = {
   refreshStartedFrom: '',
   refreshPollTimer: null,
   refreshProgressTimer: null,
-  refreshCode: '',
   refreshRunStatus: '',
 };
 
@@ -296,11 +295,9 @@ function updateRefreshProgress() {
 }
 
 async function loadRefreshRunStatus() {
-  if (!state.refreshQueuedAt || !state.refreshCode) return null;
+  if (!state.refreshQueuedAt) return null;
   try {
-    const response = await fetch(`${REFRESH_STATUS_API_URL}?v=${Date.now()}`, {
-      headers: { 'x-refresh-code': state.refreshCode },
-    });
+    const response = await fetch(`${REFRESH_STATUS_API_URL}?v=${Date.now()}`);
     if (!response.ok) return null;
     const result = await response.json();
     const run = result.run;
@@ -333,16 +330,6 @@ async function pollForRefreshResult() {
 }
 
 async function requestRefreshNow() {
-  const codeKey = 'incmv-refresh-code';
-  let refreshCode = localStorage.getItem(codeKey) || '';
-  if (!refreshCode) {
-    refreshCode = window.prompt('Enter the refresh code for this dashboard:') || '';
-    refreshCode = refreshCode.trim();
-    if (!refreshCode) return;
-    localStorage.setItem(codeKey, refreshCode);
-  }
-
-  state.refreshCode = refreshCode;
   setRefreshButtonBusy(true, 'Queueing...');
   setRefreshMessage(
     'Queueing full dashboard refresh...',
@@ -354,7 +341,6 @@ async function requestRefreshNow() {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-refresh-code': refreshCode,
       },
       body: JSON.stringify({
         generatedAt: state.data?.generatedAt || '',
@@ -362,9 +348,6 @@ async function requestRefreshNow() {
     });
     const result = await response.json().catch(() => ({}));
 
-    if (response.status === 401 || response.status === 403) {
-      localStorage.removeItem(codeKey);
-    }
     if (!response.ok) {
       throw new Error(result.error || `${response.status} ${response.statusText}`);
     }
@@ -381,7 +364,7 @@ async function requestRefreshNow() {
     setTimeout(pollForRefreshResult, 8000);
   } catch (error) {
     setRefreshButtonBusy(false);
-    setRefreshMessage(`Refresh unavailable: ${error.message}`, 'Check the refresh code or try again shortly.');
+    setRefreshMessage(`Refresh unavailable: ${error.message}`, 'Please try again shortly.');
   }
 }
 

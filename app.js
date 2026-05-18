@@ -5,6 +5,7 @@ const REFRESH_MS = 60 * 1000;
 const REFRESH_POLL_MS = 30 * 1000;
 const REFRESH_TIMEOUT_MS = 18 * 60 * 1000;
 const REFRESH_PROGRESS_MS = 7000;
+const REFRESH_LOCK_KEY = 'incmv-dashboard-refresh-lock';
 
 const state = {
   data: null,
@@ -25,6 +26,43 @@ function text(id, value) {
 function setRefreshMessage(status, detail = '') {
   text('refresh-status', status);
   text('refresh-detail', detail || 'Browser checks every minute');
+}
+
+function refreshRunState(run) {
+  if (!run) return '';
+  return `${run.status}${run.conclusion ? `:${run.conclusion}` : ''}`;
+}
+
+function isRunActive(run) {
+  return ['queued', 'in_progress', 'pending', 'waiting', 'requested'].includes(run?.status);
+}
+
+function isRefreshActive() {
+  return Boolean(state.refreshQueuedAt) && Date.now() - state.refreshQueuedAt < REFRESH_TIMEOUT_MS;
+}
+
+function persistRefreshLock() {
+  if (!isRefreshActive()) return;
+  try {
+    window.localStorage.setItem(
+      REFRESH_LOCK_KEY,
+      JSON.stringify({
+        refreshQueuedAt: state.refreshQueuedAt,
+        refreshStartedFrom: state.refreshStartedFrom,
+        refreshRunStatus: state.refreshRunStatus,
+      }),
+    );
+  } catch {
+    // Private browsing or storage restrictions should not block the dashboard.
+  }
+}
+
+function clearRefreshLock() {
+  try {
+    window.localStorage.removeItem(REFRESH_LOCK_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
 }
 
 function number(value) {
@@ -255,12 +293,34 @@ function setRefreshButtonBusy(isBusy, label = 'Refresh Now') {
   if (!button) return;
   button.disabled = isBusy;
   button.textContent = label;
+  button.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+  button.title = isBusy
+    ? 'A dashboard refresh is already running. Please wait for it to finish.'
+    : 'Queue a full dashboard refresh';
+}
+
+function startRefreshTimers() {
+  if (state.refreshPollTimer) clearInterval(state.refreshPollTimer);
+  if (state.refreshProgressTimer) clearInterval(state.refreshProgressTimer);
+  state.refreshPollTimer = setInterval(pollForRefreshResult, REFRESH_POLL_MS);
+  state.refreshProgressTimer = setInterval(updateRefreshProgress, REFRESH_PROGRESS_MS);
+}
+
+function setActiveRefresh({ queuedAt = Date.now(), startedFrom = state.data?.generatedAt || '', runStatus = 'queued' } = {}) {
+  state.refreshQueuedAt = queuedAt;
+  state.refreshStartedFrom = startedFrom;
+  state.refreshRunStatus = runStatus;
+  persistRefreshLock();
+  setRefreshButtonBusy(true, 'Refreshing...');
+  updateRefreshProgress();
+  startRefreshTimers();
 }
 
 function clearRefreshQueue(message, detail = '') {
   state.refreshQueuedAt = 0;
   state.refreshStartedFrom = '';
   state.refreshRunStatus = '';
+  clearRefreshLock();
   if (state.refreshPollTimer) {
     clearInterval(state.refreshPollTimer);
     state.refreshPollTimer = null;
@@ -302,7 +362,8 @@ async function loadRefreshRunStatus() {
     const result = await response.json();
     const run = result.run;
     if (!run) return null;
-    state.refreshRunStatus = `${run.status}${run.conclusion ? `:${run.conclusion}` : ''}`;
+    state.refreshRunStatus = refreshRunState(run);
+    persistRefreshLock();
     return run;
   } catch {
     return null;
@@ -330,6 +391,12 @@ async function pollForRefreshResult() {
 }
 
 async function requestRefreshNow() {
+  if (isRefreshActive()) {
+    setRefreshButtonBusy(true, 'Refreshing...');
+    setRefreshMessage('Refresh already running.', currentRefreshDetail());
+    return;
+  }
+
   setRefreshButtonBusy(true, 'Queueing...');
   setRefreshMessage(
     'Queueing full dashboard refresh...',
@@ -352,15 +419,16 @@ async function requestRefreshNow() {
       throw new Error(result.error || `${response.status} ${response.statusText}`);
     }
 
-    state.refreshQueuedAt = Date.now();
-    state.refreshStartedFrom = state.data?.generatedAt || '';
-    state.refreshRunStatus = 'queued';
-    setRefreshButtonBusy(true, 'Refreshing...');
-    updateRefreshProgress();
-    if (state.refreshPollTimer) clearInterval(state.refreshPollTimer);
-    if (state.refreshProgressTimer) clearInterval(state.refreshProgressTimer);
-    state.refreshPollTimer = setInterval(pollForRefreshResult, REFRESH_POLL_MS);
-    state.refreshProgressTimer = setInterval(updateRefreshProgress, REFRESH_PROGRESS_MS);
+    const queuedAt = Number.isFinite(Date.parse(result.run?.createdAt)) ? Date.parse(result.run.createdAt) : Date.now();
+    const runStatus = result.alreadyRunning && result.run ? refreshRunState(result.run) : 'queued';
+    setActiveRefresh({
+      queuedAt,
+      startedFrom: state.data?.generatedAt || '',
+      runStatus,
+    });
+    if (result.alreadyRunning) {
+      setRefreshMessage('Refresh already running.', currentRefreshDetail());
+    }
     setTimeout(pollForRefreshResult, 8000);
   } catch (error) {
     setRefreshButtonBusy(false);
@@ -379,7 +447,53 @@ function setupTabs() {
   });
 }
 
+function restoreRefreshLock() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(REFRESH_LOCK_KEY) || '{}');
+    if (!saved.refreshQueuedAt || Date.now() - saved.refreshQueuedAt > REFRESH_TIMEOUT_MS) {
+      clearRefreshLock();
+      return;
+    }
+    state.refreshQueuedAt = Number(saved.refreshQueuedAt);
+    state.refreshStartedFrom = saved.refreshStartedFrom || '';
+    state.refreshRunStatus = saved.refreshRunStatus || 'queued';
+    setRefreshButtonBusy(true, 'Refreshing...');
+    updateRefreshProgress();
+    startRefreshTimers();
+    setTimeout(pollForRefreshResult, 1500);
+  } catch {
+    clearRefreshLock();
+  }
+}
+
+async function syncActiveRefreshFromServer() {
+  try {
+    const response = await fetch(`${REFRESH_STATUS_API_URL}?v=${Date.now()}`, { cache: 'no-store' });
+    if (!response.ok) return;
+    const result = await response.json();
+    const run = result.run;
+    if (!isRunActive(run)) return;
+
+    setActiveRefresh({
+      queuedAt: Number.isFinite(Date.parse(run.createdAt)) ? Date.parse(run.createdAt) : Date.now(),
+      startedFrom: state.data?.generatedAt || '',
+      runStatus: refreshRunState(run),
+    });
+    setRefreshMessage('Refresh already running.', currentRefreshDetail());
+    setTimeout(pollForRefreshResult, 1500);
+  } catch {
+    // The next normal polling cycle can try again.
+  }
+}
+
+window.addEventListener('beforeunload', (event) => {
+  if (!isRefreshActive()) return;
+  event.preventDefault();
+  event.returnValue = 'The dashboard is refreshing. Leaving now will not cancel it, but please wait so you do not queue another refresh.';
+});
+
 setupTabs();
+restoreRefreshLock();
 document.getElementById('refresh-now')?.addEventListener('click', requestRefreshNow);
-loadDashboard();
+loadDashboard().then(syncActiveRefreshFromServer);
 setInterval(loadDashboard, REFRESH_MS);

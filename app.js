@@ -382,11 +382,20 @@ async function pollForRefreshResult() {
   const run = await loadRefreshRunStatus();
   updateRefreshProgress();
   await loadDashboard();
-  if (run?.status === 'completed' && run.conclusion !== 'success' && state.refreshStartedFrom === state.data?.generatedAt) {
-    clearRefreshQueue(
-      'Refresh did not finish successfully.',
-      'The previous dashboard data is still shown. GitHub or YouTube may have returned a temporary error.',
-    );
+  if (run?.status === 'completed' && state.refreshQueuedAt) {
+    if (run.conclusion === 'success') {
+      clearRefreshQueue(
+        state.refreshStartedFrom === state.data?.generatedAt
+          ? 'Refresh complete. Data was already current.'
+          : `Refresh complete: ${state.data?.generatedAt || 'latest data loaded'}`,
+        'GitHub finished successfully. The dashboard will keep checking every minute.',
+      );
+    } else {
+      clearRefreshQueue(
+        'Refresh did not finish successfully.',
+        'The previous dashboard data is still shown. GitHub or YouTube may have returned a temporary error.',
+      );
+    }
   }
 }
 

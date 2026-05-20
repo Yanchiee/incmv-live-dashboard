@@ -1,0 +1,10 @@
+name = "incmv-dashboard-refresh-cron"
+main = "src/worker.js"
+compatibility_date = "2026-05-20"
+account_id = "1adbe6308690a1d3ce7fb732fa17e859"
+
+[triggers]
+crons = [
+  "5,35 0-15 * * *",
+  "5 16 * * *"
+]

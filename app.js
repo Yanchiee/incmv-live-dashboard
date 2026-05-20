@@ -79,6 +79,62 @@ function compactTimestamp(value) {
   };
 }
 
+function parseManilaTimestamp(value) {
+  const raw = String(value || '').replace(/^Fetched\s+/i, '').replace(/^Updated\s+/i, '');
+  const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4}),\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s+([AP]M)/i);
+  if (!match) return null;
+  const [, month, day, year, hourText, minute, second = '0', meridiem] = match;
+  let hour = Number(hourText);
+  if (meridiem.toUpperCase() === 'PM' && hour < 12) hour += 12;
+  if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), hour - 8, Number(minute), Number(second));
+}
+
+function parseRelativeTime(value) {
+  const raw = String(value || '').toLowerCase().replace(/\(edited\)/g, '').trim();
+  if (raw === 'just now') return 0;
+  const match = raw.match(/(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago/);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const units = {
+    second: 1000,
+    minute: 60 * 1000,
+    hour: 60 * 60 * 1000,
+    day: 24 * 60 * 60 * 1000,
+    week: 7 * 24 * 60 * 60 * 1000,
+    month: 30 * 24 * 60 * 60 * 1000,
+    year: 365 * 24 * 60 * 60 * 1000,
+  };
+  return amount * units[match[2]];
+}
+
+function relativeFromNow(timestamp) {
+  if (!Number.isFinite(timestamp)) return '';
+  const elapsed = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(elapsed / (60 * 1000));
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? '' : 's'} ago`;
+}
+
+function commentDisplayTime(row) {
+  const fetchedAt = parseManilaTimestamp(row.fetchedAt);
+  const relativeOffset = parseRelativeTime(row.commentTime);
+  if (fetchedAt !== null && relativeOffset !== null) {
+    return relativeFromNow(fetchedAt - relativeOffset);
+  }
+  return row.commentTime || '';
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -218,7 +274,7 @@ function renderComments(rows) {
     <article class="comment">
       <div class="comment-meta">
         <span>${escapeHtml(row.commenterName)}</span>
-        <span>${escapeHtml(row.commentTime)}</span>
+        <span>${escapeHtml(commentDisplayTime(row))}</span>
       </div>
       <p>${escapeHtml(row.commentText)}</p>
     </article>

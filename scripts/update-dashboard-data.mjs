@@ -592,6 +592,43 @@ async function hydrateAllVideos(videos, concurrency = 8) {
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
 }
 
+async function hydrateVideosFromYouTubeDataApi(videos) {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) return false;
+
+  let updated = 0;
+  for (let start = 0; start < videos.length; start += 50) {
+    const batch = videos.slice(start, start + 50);
+    const url = new URL('https://www.googleapis.com/youtube/v3/videos');
+    url.searchParams.set('part', 'statistics,snippet');
+    url.searchParams.set('id', batch.map((video) => video.videoId).join(','));
+    url.searchParams.set('key', apiKey);
+
+    const response = await fetch(url, { signal: AbortSignal.timeout(25000) });
+    if (!response.ok) {
+      const message = await response.text().catch(() => '');
+      throw new Error(`YouTube Data API failed: ${response.status} ${response.statusText} ${message}`);
+    }
+
+    const payload = await response.json();
+    const byId = new Map((payload.items || []).map((item) => [item.id, item]));
+    for (const video of batch) {
+      const item = byId.get(video.videoId);
+      const exactViews = Number(item?.statistics?.viewCount);
+      if (Number.isFinite(exactViews) && exactViews > 0) {
+        video.views = exactViews;
+        video.viewsExact = true;
+        video.viewCountSource = 'YouTube Data API statistics.viewCount';
+        updated += 1;
+      }
+      if (item?.snippet?.publishedAt) video.published = item.snippet.publishedAt.slice(0, 10);
+    }
+  }
+
+  console.log(`YouTube Data API exact view counts: ${updated}/${videos.length}`);
+  return true;
+}
+
 function ranked(videos) {
   return [...videos].sort((a, b) => {
     const countDiff = (Number(b.views) || 0) - (Number(a.views) || 0);
@@ -628,7 +665,13 @@ async function fetchIncmvRankings(previousPayload) {
     console.log(`${region}: ${entries.length} playlist videos`);
     allVideos.push(...entries);
   }
-  await hydrateAllVideos(allVideos);
+  try {
+    const usedDataApi = await hydrateVideosFromYouTubeDataApi(allVideos);
+    if (!usedDataApi) await hydrateAllVideos(allVideos);
+  } catch (error) {
+    console.error(`YouTube Data API hydrate failed; falling back to public page/player hydrate: ${error.message}`);
+    await hydrateAllVideos(allVideos);
+  }
   preservePreviousExactViews(allVideos, previousPayload);
   return {
     global: rankingRows(allVideos),

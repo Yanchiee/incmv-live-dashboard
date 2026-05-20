@@ -30,6 +30,11 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install exact YouTube view counter
+        run: |
+          python -m pip install --user --upgrade yt-dlp
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Build fresh dashboard data
         run: node scripts/update-dashboard-data.mjs
 

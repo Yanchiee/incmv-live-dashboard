@@ -1,11 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const siteDir = path.resolve(__dirname, '..');
 const dataDir = path.join(siteDir, 'data');
 const outFile = path.join(dataDir, 'dashboard.json');
+const execFileAsync = promisify(execFile);
 
 const BENGUET_VIDEO_ID = 'ROa3kbG5M0U';
 const BENGUET_VIDEO_URL = `https://www.youtube.com/watch?v=${BENGUET_VIDEO_ID}`;
@@ -519,6 +522,34 @@ async function hydrateVideo(video) {
     if (dateMatch) video.published = dateMatch[1];
   } catch (error) {
     video.notes = `${video.notes}; watch page view fetch failed: ${error.message}`;
+  }
+
+  if (video.viewsExact) return;
+
+  try {
+    const { stdout } = await execFileAsync(
+      process.env.YT_DLP_BIN || 'yt-dlp',
+      [
+        '--socket-timeout',
+        '12',
+        '--dump-json',
+        '--skip-download',
+        '--no-warnings',
+        `https://www.youtube.com/watch?v=${video.videoId}`,
+      ],
+      { timeout: 20000, maxBuffer: 5 * 1024 * 1024 },
+    );
+    const metadata = JSON.parse(stdout);
+    if (Number.isFinite(metadata.view_count) && metadata.view_count > 0) {
+      video.views = metadata.view_count;
+      video.viewsExact = true;
+      video.viewCountSource = 'yt-dlp exact view_count';
+    }
+    if (metadata.upload_date && /^\d{8}$/.test(metadata.upload_date)) {
+      video.published = `${metadata.upload_date.slice(0, 4)}-${metadata.upload_date.slice(4, 6)}-${metadata.upload_date.slice(6, 8)}`;
+    }
+  } catch (error) {
+    video.notes = `${video.notes || ''}; yt-dlp view fetch failed: ${error.message}`.trim();
   }
 }
 

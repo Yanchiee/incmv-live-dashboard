@@ -75,6 +75,7 @@ jobs:
           node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync("data/dashboard.json", "utf8")); if (!data.source?.fullCommentRows) throw new Error("Missing comment count"); if (!data.overview?.benguetEntry?.currentViews) throw new Error("Missing Benguet views"); if ((data.rankings?.global || []).length < 100) throw new Error("Global ranking is unexpectedly short"); console.log(JSON.stringify({ generatedAt: data.generatedAt, comments: data.source.fullCommentRows, benguetViews: data.overview.benguetEntry.currentViews, globalRows: data.rankings.global.length }, null, 2));'
 
       - name: Deploy Cloudflare Pages
+        continue-on-error: true
         env:
           RAW_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |

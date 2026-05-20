@@ -365,7 +365,7 @@ async function fetchBenguetComments() {
     }
 
     if (requests % 50 === 0) console.log(`comments requests=${requests} comments=${comments.length} queue=${queue.length}`);
-    await sleep(125);
+    await sleep(60);
   }
 
   return {
@@ -548,7 +548,7 @@ function preservePreviousExactViews(videos, previousPayload) {
   }
 }
 
-async function hydrateAllVideos(videos, concurrency = 5) {
+async function hydrateAllVideos(videos, concurrency = 8) {
   let index = 0;
   async function worker() {
     while (index < videos.length) {

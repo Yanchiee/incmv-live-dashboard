@@ -11,7 +11,7 @@ on:
 
 concurrency:
   group: update-dashboard-data
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   update-dashboard-data:

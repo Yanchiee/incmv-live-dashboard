@@ -567,16 +567,21 @@ function previousExactViewMap(previousPayload) {
   );
 }
 
-function preservePreviousExactViews(videos, previousPayload) {
-  const previousByVideoId = previousExactViewMap(previousPayload);
-  for (const video of videos) {
-    if (video.viewsExact) continue;
-    const previous = previousByVideoId.get(video.videoId);
-    if (!previous?.currentViews) continue;
-    video.views = previous.currentViews;
-    video.viewsExact = true;
-    video.viewCountSource = 'previous exact viewCount retained';
-  }
+function assertExactViews(videos) {
+  const staleOrMissing = videos.filter((video) => {
+    if (video.viewsExact !== true) return true;
+    if (!video.viewCountSource) return true;
+    return video.viewCountSource === 'previous exact viewCount retained' || video.viewCountSource === 'playlist rounded text';
+  });
+  if (!staleOrMissing.length) return;
+
+  const sample = staleOrMissing
+    .slice(0, 12)
+    .map((video) => `${video.entry || video.title} (${video.videoId}): ${video.notes || video.viewCountSource || 'no exact source'}`)
+    .join('\n');
+  throw new Error(
+    `Exact YouTube view hydration failed for ${staleOrMissing.length}/${videos.length} videos. Refusing to publish stale dashboard data.\n${sample}`,
+  );
 }
 
 async function hydrateAllVideos(videos, concurrency = 8) {
@@ -672,7 +677,7 @@ async function fetchIncmvRankings(previousPayload) {
     console.error(`YouTube Data API hydrate failed; falling back to public page/player hydrate: ${error.message}`);
     await hydrateAllVideos(allVideos);
   }
-  preservePreviousExactViews(allVideos, previousPayload);
+  assertExactViews(allVideos);
   return {
     global: rankingRows(allVideos),
     philippines: rankingRows(allVideos.filter((video) => video.group === 'Philippines')),

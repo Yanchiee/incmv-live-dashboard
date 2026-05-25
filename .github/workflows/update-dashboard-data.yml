@@ -82,7 +82,7 @@ jobs:
 
       - name: Verify generated data
         run: |
-          node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync("data/dashboard.json", "utf8")); if (!data.source?.fullCommentRows) throw new Error("Missing comment count"); if (!data.overview?.benguetEntry?.currentViews) throw new Error("Missing Benguet views"); if ((data.rankings?.global || []).length < 100) throw new Error("Global ranking is unexpectedly short"); console.log(JSON.stringify({ generatedAt: data.generatedAt, comments: data.source.fullCommentRows, benguetViews: data.overview.benguetEntry.currentViews, globalRows: data.rankings.global.length }, null, 2));'
+          node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync("data/dashboard.json", "utf8")); if (!data.source?.fullCommentRows) throw new Error("Missing comment count"); if (!data.overview?.benguetEntry?.currentViews) throw new Error("Missing Benguet views"); const global = data.rankings?.global || []; if (global.length < 100) throw new Error("Global ranking is unexpectedly short"); const stale = global.filter((row) => row.viewCountExact !== true || row.viewCountSource === "previous exact viewCount retained" || row.viewCountSource === "playlist rounded text"); if (stale.length) throw new Error(`Refusing stale/rounded view data: ${stale.slice(0, 8).map((row) => `${row.entry}:${row.viewCountSource || "missing"}`).join(", ")}`); console.log(JSON.stringify({ generatedAt: data.generatedAt, comments: data.source.fullCommentRows, benguetViews: data.overview.benguetEntry.currentViews, globalRows: global.length, viewCountSource: data.overview.benguetEntry.viewCountSource }, null, 2));'
 
       - name: Deploy Cloudflare Pages
         continue-on-error: true
